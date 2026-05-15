@@ -31,7 +31,8 @@ export default function AddGradeScreen() {
   const [loading, setLoading] = useState(false);
 
   const handleSave = async () => {
-    const effectiveUserId = targetUserId || user?.uid;
+    if (!user) return;
+    const effectiveUserId = targetUserId || user.uid;
     if (!effectiveUserId || !classId) return;
 
     if (!nombreParcial.trim() || !nota.trim() || !porcentaje.trim()) {
@@ -56,6 +57,7 @@ export default function AddGradeScreen() {
       setLoading(true);
       await addDoc(collection(db, "grades"), {
         userId: effectiveUserId,
+        profesorId: user.uid,
         classId: classId,
         nombreParcial: nombreParcial.trim(),
         nota: notaNum,

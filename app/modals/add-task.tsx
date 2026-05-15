@@ -15,7 +15,10 @@ import {
     serverTimestamp, 
     doc,
     getDoc,
-    updateDoc
+    updateDoc,
+    getDocs,
+    query,
+    where
 } from "firebase/firestore";
 import { router, useLocalSearchParams } from "expo-router";
 import { Picker } from "@react-native-picker/picker";
@@ -42,6 +45,7 @@ export default function AddTaskScreen() {
   const [prioridad, setPrioridad] = useState<TaskPriority>("media");
   const [entregableTipo, setEntregableTipo] = useState<"github" | "archivo" | "url" | "otro">("github");
   const [entregableUrl, setEntregableUrl] = useState("");
+  const [porcentaje, setPorcentaje] = useState("0");
   const [loading, setLoading] = useState(false);
 
   // Lista de materias disponibles según el rol
@@ -55,15 +59,16 @@ export default function AddTaskScreen() {
     const fetchTask = async () => {
       setLoading(true);
       try {
-        const taskSnap = await getDoc(doc(db, "tasks", id));
-        if (taskSnap.exists()) {
-          const data = taskSnap.data();
-          setTitulo(data.titulo || "");
-          setDescripcion(data.descripcion || "");
+        const docSnap = await getDoc(doc(db, "tasks", id));
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setTitulo(data.titulo);
+          setDescripcion(data.descripcion);
           setMateriaId(data.materiaId || "");
-          setPrioridad(data.prioridad || "media");
+          setPrioridad(data.prioridad);
           setEntregableTipo(data.entregableTipo || "github");
           setEntregableUrl(data.entregableUrl || "");
+          setPorcentaje(data.porcentaje?.toString() || "0");
         }
       } catch (error) {
         console.error("Error fetching task:", error);
@@ -85,8 +90,7 @@ export default function AddTaskScreen() {
       setLoading(true);
       const selectedClass = availableClasses.find(c => c!.id === materiaId);
       
-      const taskData = {
-        userId: user?.uid,
+      const baseTaskData = {
         titulo: titulo.trim(),
         descripcion: descripcion.trim(),
         materiaId: materiaId || null,
@@ -94,22 +98,57 @@ export default function AddTaskScreen() {
         prioridad,
         entregableTipo,
         entregableUrl: entregableUrl.trim(),
+        porcentaje: parseFloat(porcentaje) || 0,
         updatedAt: serverTimestamp(),
       };
 
       if (id) {
-          await updateDoc(doc(db, "tasks", id), taskData);
+          await updateDoc(doc(db, "tasks", id), baseTaskData);
       } else {
-          await addDoc(collection(db, "tasks"), {
-            ...taskData,
-            completada: false,
-            fechaEntrega: serverTimestamp(),
-            createdAt: serverTimestamp(),
-          });
+          if (profile?.rol === "profesor" && materiaId) {
+             // 1. Obtener alumnos inscritos en esta materia
+             const enrollmentsRef = collection(db, "enrollments");
+             const q = query(enrollmentsRef, where("classId", "==", materiaId), where("status", "==", "active"));
+             const snapshot = await getDocs(q);
+             
+             const groupId = Date.now().toString(); // Identificador común
+
+             if (snapshot.empty) {
+                Alert.alert("Aviso", "No hay alumnos inscritos en esta clase.");
+                setLoading(false);
+                return;
+             }
+
+             // 2. Crear una copia para cada alumno
+             for (const docSnap of snapshot.docs) {
+                const enrollment = docSnap.data();
+                await addDoc(collection(db, "tasks"), {
+                   ...baseTaskData,
+                   userId: enrollment.studentId, // Asignada al alumno
+                   studentName: enrollment.studentNombre,
+                   professorId: user?.uid,       // Creada por este profesor
+                   professorName: profile?.nombre || "Profesor",
+                   isAssigned: true,
+                   groupId: groupId,
+                   completada: false,
+                   fechaEntrega: serverTimestamp(),
+                   createdAt: serverTimestamp(),
+                });
+             }
+          } else {
+             await addDoc(collection(db, "tasks"), {
+                ...baseTaskData,
+                userId: user?.uid,
+                completada: false,
+                fechaEntrega: serverTimestamp(),
+                createdAt: serverTimestamp(),
+             });
+          }
       }
 
       router.back();
     } catch (error) {
+      console.error(error);
       Alert.alert("Error", "No se pudo guardar la tarea.");
     } finally {
       setLoading(false);
@@ -187,16 +226,23 @@ export default function AddTaskScreen() {
             size={16} 
             color="#6B7280" 
           />
-          <Text style={styles.label}> 
-            {entregableTipo === "github" ? "Enlace del Repositorio" : "Enlace / Referencia"}
-          </Text>
+          <Text style={styles.label}>Link de Referencia (Opcional)</Text>
         </View>
-        <TextInput 
+        <TextInput
           style={styles.input}
-          placeholder="https://github.com/usuario/repo"
+          placeholder="https://github.com/..."
           value={entregableUrl}
           onChangeText={setEntregableUrl}
           autoCapitalize="none"
+        />
+
+        <Text style={styles.label}>Porcentaje de la Nota (%)</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Ej: 15"
+          value={porcentaje}
+          onChangeText={setPorcentaje}
+          keyboardType="numeric"
         />
       </View>
 

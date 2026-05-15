@@ -1,56 +1,92 @@
-import { useEffect, useState } from "react";
-import { 
-  ActivityIndicator, 
-  FlatList, 
-  StyleSheet, 
-  Text, 
-  TouchableOpacity, 
-  View 
-} from "react-native";
-import { 
-    collection, 
-    query, 
-    where, 
-    onSnapshot, 
-    orderBy, 
-    updateDoc, 
-    doc,
-    deleteDoc
-} from "firebase/firestore";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { Alert } from "react-native";
+import {
+  collection,
+  deleteDoc,
+  doc,
+  onSnapshot,
+  orderBy,
+  query,
+  updateDoc,
+  where,
+  writeBatch,
+  getDocs
+} from "firebase/firestore";
+import { useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
+} from "react-native";
 
-import { db } from "@/src/api/firebase";
-import { useAuth } from "@/src/lib/auth-context";
-import { Task, TaskPriority } from "@/src/domain/task";
 import { Colors } from "@/constants/theme";
+import { db } from "@/src/api/firebase";
+import { Task, TaskPriority } from "@/src/domain/task";
+import { useAuth } from "@/src/lib/auth-context";
 
 export default function TareasScreen() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
+  const [viewMode, setViewMode] = useState<"mis_tareas" | "asignadas">("mis_tareas");
 
   useEffect(() => {
     if (!user) return;
 
-    const q = query(
-      collection(db, "tasks"),
-      where("userId", "==", user.uid),
-      orderBy("fechaEntrega", "asc")
-    );
+    let q;
+    if (profile?.rol === "profesor" && viewMode === "asignadas") {
+      q = query(
+        collection(db, "tasks"),
+        where("professorId", "==", user.uid),
+        orderBy("createdAt", "desc")
+      );
+    } else {
+      q = query(
+        collection(db, "tasks"),
+        where("userId", "==", user.uid),
+        orderBy("fechaEntrega", "asc")
+      );
+    }
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const docs = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       })) as Task[];
-      setTasks(docs);
+
+      if (profile?.rol === "profesor" && viewMode === "asignadas") {
+          // Agrupar por groupId para que el profesor vea una fila por tarea asignada
+          const groups: Record<string, any> = {};
+          docs.forEach(task => {
+              if (!task.groupId) return;
+              if (!groups[task.groupId]) {
+                  groups[task.groupId] = {
+                      id: task.groupId, // Usamos el groupId como ID virtual
+                      titulo: task.titulo,
+                      materiaNombre: task.materiaNombre,
+                      prioridad: task.prioridad,
+                      total: 0,
+                      completadas: 0,
+                      isGroup: true,
+                      materiaId: task.materiaId
+                  };
+              }
+              groups[task.groupId].total++;
+              if (task.completada) groups[task.groupId].completadas++;
+          });
+          setTasks(Object.values(groups));
+      } else {
+          setTasks(docs);
+      }
       setLoading(false);
     });
 
     return () => unsubscribe();
-  }, [user]);
+  }, [user, viewMode, profile]);
 
   const toggleTask = async (taskId: string, currentStatus: boolean) => {
     try {
@@ -63,23 +99,34 @@ export default function TareasScreen() {
     }
   };
 
-  const deleteTask = async (taskId: string) => {
+  const deleteTask = async (taskId: string, isGroup?: boolean) => {
     Alert.alert(
       "Eliminar Tarea",
       "¿Estás seguro de que deseas eliminar esta tarea? Esta acción no se puede deshacer.",
       [
         { text: "Cancelar", style: "cancel" },
-        { 
-          text: "Eliminar", 
-          style: "destructive", 
+        {
+          text: "Eliminar",
+          style: "destructive",
           onPress: async () => {
             try {
-              await deleteDoc(doc(db, "tasks", taskId));
+              if (isGroup) {
+                const batch = writeBatch(db);
+                const q = query(collection(db, "tasks"), where("groupId", "==", taskId));
+                const snapshot = await getDocs(q);
+                snapshot.forEach((docSnap) => {
+                  batch.delete(docSnap.ref);
+                });
+                await batch.commit();
+                Alert.alert("Éxito", "Grupo de tareas eliminado correctamente.");
+              } else {
+                await deleteDoc(doc(db, "tasks", taskId));
+              }
             } catch (error) {
               console.error("Error al eliminar tarea:", error);
               Alert.alert("Error", "No se pudo eliminar la tarea.");
             }
-          } 
+          }
         }
       ]
     );
@@ -96,45 +143,71 @@ export default function TareasScreen() {
 
   const renderItem = ({ item }: { item: Task }) => (
     <View style={styles.card}>
-      <TouchableOpacity 
-        style={styles.checkButton} 
-        onPress={() => toggleTask(item.id, item.completada)}
+      <TouchableOpacity
+        style={styles.checkButton}
+        onPress={() => viewMode !== "asignadas" && toggleTask(item.id, item.completada)}
+        disabled={viewMode === "asignadas"}
       >
-        <Ionicons 
-          name={item.completada ? "checkbox" : "square-outline"} 
-          size={24} 
-          color={item.completada ? "#10B981" : "#D1D5DB"} 
+        <Ionicons
+          name={item.completada ? "checkbox" : "square-outline"}
+          size={24}
+          color={item.completada ? "#10B981" : "#D1D5DB"}
         />
       </TouchableOpacity>
-      
-      <TouchableOpacity 
+
+      <TouchableOpacity
         style={styles.content}
-        onPress={() => router.push({ pathname: "/modals/view-task" as any, params: { id: item.id } })}
+        onPress={() => {
+          // @ts-ignore
+          if (item.isGroup) {
+            router.push({ 
+              pathname: "/admin/task-tracking", 
+              // @ts-ignore
+              params: { groupId: item.id, titulo: item.titulo } 
+            });
+          } else {
+            router.push({ pathname: "/modals/view-task" as any, params: { id: item.id } });
+          }
+        }}
       >
         <Text style={[styles.title, item.completada && styles.completedText]} numberOfLines={1}>
-          {item.titulo}
+          {/* @ts-ignore */}
+          {item.titulo} {item.isGroup ? `(Grupo)` : (item.studentName ? `(${item.studentName})` : '')}
         </Text>
-        <Text style={styles.details}>{item.materiaNombre || "General"}</Text>
+        <Text style={styles.details}>
+          {/* @ts-ignore */}
+          {item.isGroup ? `Progreso: ${item.completadas}/${item.total} entregadas` : item.materiaNombre || "General"}
+        </Text>
         <View style={styles.footer}>
           <View style={[styles.priorityBadge, { backgroundColor: getPriorityColor(item.prioridad) }]}>
             <Text style={styles.priorityText}>{item.prioridad}</Text>
           </View>
+          {/* @ts-ignore */}
+          {item.isGroup && (
+             <View style={[styles.priorityBadge, { backgroundColor: "#3B82F6", marginLeft: 8 }]}>
+                <Text style={styles.priorityText}>{item.materiaNombre}</Text>
+             </View>
+          )}
         </View>
       </TouchableOpacity>
 
       <View style={styles.actions}>
-        <TouchableOpacity 
-          style={styles.actionButton} 
-          onPress={() => router.push({ pathname: "/modals/add-task", params: { id: item.id } })}
-        >
-          <Ionicons name="pencil-outline" size={20} color="#4B5563" />
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={styles.actionButton} 
-          onPress={() => deleteTask(item.id)}
-        >
-          <Ionicons name="trash-outline" size={20} color="#EF4444" />
-        </TouchableOpacity>
+        {(!item.isGroup && !(profile?.rol === "estudiante" && item.isAssigned)) && (
+          <TouchableOpacity 
+            style={styles.actionButton} 
+            onPress={() => router.push({ pathname: "/modals/add-task", params: { id: item.id } })}
+          >
+            <Ionicons name="pencil-outline" size={20} color="#4B5563" />
+          </TouchableOpacity>
+        )}
+        {!(profile?.rol === "estudiante" && item.isAssigned) && (
+          <TouchableOpacity 
+            style={styles.actionButton} 
+            onPress={() => deleteTask(item.id, item.isGroup)}
+          >
+            <Ionicons name="trash-outline" size={20} color="#EF4444" />
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
@@ -149,6 +222,22 @@ export default function TareasScreen() {
 
   return (
     <View style={styles.container}>
+      {profile?.rol === "profesor" && (
+        <View style={{ flexDirection: 'row', padding: 16, gap: 10, backgroundColor: "#FFF", borderBottomWidth: 1, borderBottomColor: "#E5E7EB" }}>
+          <TouchableOpacity
+            style={[styles.actionButton, viewMode === "mis_tareas" && { backgroundColor: Colors.light.tint }]}
+            onPress={() => setViewMode("mis_tareas")}
+          >
+            <Text style={{ color: viewMode === "mis_tareas" ? "#FFF" : "#000", fontWeight: '700' }}>Mis Tareas</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.actionButton, viewMode === "asignadas" && { backgroundColor: Colors.light.tint }]}
+            onPress={() => setViewMode("asignadas")}
+          >
+            <Text style={{ color: viewMode === "asignadas" ? "#FFF" : "#000", fontWeight: '700' }}>Seguimiento</Text>
+          </TouchableOpacity>
+        </View>
+      )}
       {tasks.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Ionicons name="list-outline" size={64} color="#D1D5DB" />
@@ -164,7 +253,7 @@ export default function TareasScreen() {
         />
       )}
 
-      <TouchableOpacity 
+      <TouchableOpacity
         style={styles.fab}
         onPress={() => router.push("/modals/add-task")}
       >

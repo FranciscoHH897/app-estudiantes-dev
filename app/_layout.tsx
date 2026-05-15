@@ -20,8 +20,18 @@ export default function RootLayout() {
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="perfil" options={{ headerShown: false }} />
             <Stack.Screen name="admin/usuarios" options={{ headerShown: false }} />
+            <Stack.Screen name="admin/manage-classes" options={{ headerShown: true, title: "Gestionar Clases" }} />
+            <Stack.Screen name="admin/manage-students" options={{ headerShown: false }} />
+            <Stack.Screen name="admin/task-tracking" options={{ headerShown: false }} />
+            
             <Stack.Screen name="modals/add-schedule" options={{ presentation: "modal", title: "Nueva Materia", headerShown: true }} />
             <Stack.Screen name="modals/add-task" options={{ presentation: "modal", title: "Nueva Tarea", headerShown: true }} />
+            <Stack.Screen name="modals/add-grade" options={{ presentation: "modal", title: "Registrar Nota", headerShown: true }} />
+            <Stack.Screen name="modals/grade-task" options={{ presentation: "modal", title: "Calificar Tarea", headerShown: true }} />
+            <Stack.Screen name="modals/view-grades" options={{ presentation: "modal", title: "Ver Notas", headerShown: true }} />
+            <Stack.Screen name="modals/view-schedule" options={{ presentation: "modal", title: "Detalle de Clase", headerShown: true }} />
+            <Stack.Screen name="modals/view-task" options={{ presentation: "modal", title: "Detalle de Tarea", headerShown: true }} />
+            
             <Stack.Screen name="modal" options={{ presentation: "modal", title: "Modal", headerShown: true }} />
           </Stack>
           <StatusBar style="auto" />

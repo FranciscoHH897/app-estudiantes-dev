@@ -1,24 +1,30 @@
-import { useEffect, useState } from "react";
-import { 
-  ActivityIndicator, 
-  ScrollView, 
-  StyleSheet, 
-  Text, 
-  TouchableOpacity, 
-  View 
-} from "react-native";
-import { doc, getDoc } from "firebase/firestore";
-import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { router, useLocalSearchParams } from "expo-router";
+import { doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  TextInput,
+  Alert
+} from "react-native";
 
+import { Colors } from "@/constants/theme";
 import { db } from "@/src/api/firebase";
 import { Task, TaskPriority } from "@/src/domain/task";
-import { Colors } from "@/constants/theme";
+import { useAuth } from "@/src/lib/auth-context";
 
 export default function ViewTaskScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { user, profile } = useAuth();
   const [task, setTask] = useState<Task | null>(null);
   const [loading, setLoading] = useState(true);
+  const [evidence, setEvidence] = useState("");
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -28,7 +34,9 @@ export default function ViewTaskScreen() {
         const docRef = doc(db, "tasks", id);
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
-          setTask({ id: docSnap.id, ...docSnap.data() } as Task);
+          const data = { id: docSnap.id, ...docSnap.data() } as Task;
+          setTask(data);
+          setEvidence(data.entregableUrl || "");
         }
       } catch (error) {
         console.error("Error fetching task:", error);
@@ -36,9 +44,26 @@ export default function ViewTaskScreen() {
         setLoading(false);
       }
     };
-
     fetchTask();
   }, [id]);
+
+  const toggleComplete = async () => {
+    if (!task) return;
+    try {
+      setSaving(true);
+      await updateDoc(doc(db, "tasks", task.id), {
+        completada: !task.completada,
+        entregableUrl: evidence.trim(),
+        updatedAt: serverTimestamp()
+      });
+      setTask({ ...task, completada: !task.completada, entregableUrl: evidence.trim() });
+      Alert.alert("Éxito", task.completada ? "Tarea marcada como pendiente" : "Tarea enviada con éxito");
+    } catch (error) {
+      Alert.alert("Error", "No se pudo actualizar la tarea");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const getPriorityColor = (priority: TaskPriority) => {
     switch (priority) {
@@ -92,8 +117,13 @@ export default function ViewTaskScreen() {
           <Ionicons name="checkmark-circle-outline" size={20} color={task.completada ? "#10B981" : "#6B7280"} />
           <Text style={styles.infoLabel}>Estado:</Text>
           <Text style={[styles.infoValue, task.completada && { color: "#10B981", fontWeight: "700" }]}>
-            {task.completada ? "Completada" : "Pendiente"}
+            {task.completada ? (task.calificada ? `Calificada: ${task.calificacion}` : "Enviada / Completada") : "Pendiente"}
           </Text>
+        </View>
+        <View style={styles.infoRow}>
+          <Ionicons name="stats-chart-outline" size={20} color="#6B7280" />
+          <Text style={styles.infoLabel}>Peso:</Text>
+          <Text style={styles.infoValue}>{task.porcentaje || 0}% de la nota</Text>
         </View>
       </View>
 
@@ -106,16 +136,47 @@ export default function ViewTaskScreen() {
         </Text>
       </View>
 
-      <TouchableOpacity 
-        style={styles.editButton} 
-        onPress={() => {
-          router.back();
-          router.push({ pathname: "/modals/add-task", params: { id: task.id } });
-        }}
-      >
-        <Ionicons name="pencil" size={20} color="#FFF" />
-        <Text style={styles.editButtonText}>Editar Tarea</Text>
-      </TouchableOpacity>
+      {profile?.rol === "estudiante" && (task.isAssigned || task.professorId) && (
+        <View style={{ marginTop: 24 }}>
+          <Text style={styles.label}>Mi Entrega (Link / GitHub)</Text>
+          <TextInput
+            style={[styles.input, (task.calificada || task.completada) && { backgroundColor: "#F3F4F6", color: "#9CA3AF" }]}
+            placeholder="https://github.com/..."
+            value={evidence}
+            onChangeText={setEvidence}
+            editable={!task.calificada && !task.completada}
+            autoCapitalize="none"
+          />
+
+          <TouchableOpacity
+            style={[
+              styles.submitButton,
+              task.completada && { backgroundColor: "#6B7280" },
+              task.calificada && { opacity: 0.5 }
+            ]}
+            onPress={toggleComplete}
+            disabled={saving || task.calificada}
+          >
+            <Ionicons name={task.completada ? "refresh" : "cloud-upload"} size={20} color="#FFF" />
+            <Text style={styles.submitButtonText}>
+              {saving ? "Procesando..." : (task.completada ? "Deshacer Entrega" : "Enviar Tarea")}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {(!task.isAssigned || profile?.rol === "profesor") && (
+        <TouchableOpacity
+          style={styles.editButton}
+          onPress={() => {
+            router.back();
+            router.push({ pathname: "/modals/add-task", params: { id: task.id } });
+          }}
+        >
+          <Ionicons name="pencil" size={20} color="#FFF" />
+          <Text style={styles.editButtonText}>Editar Tarea</Text>
+        </TouchableOpacity>
+      )}
     </ScrollView>
   );
 }
@@ -226,5 +287,28 @@ const styles = StyleSheet.create({
   backButtonText: {
     color: Colors.light.tint,
     fontWeight: "600",
+  },
+  input: {
+    backgroundColor: "#FFF",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 15,
+    marginBottom: 16,
+  },
+  submitButton: {
+    backgroundColor: "#10B981",
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 14,
+    borderRadius: 12,
+    gap: 8,
+  },
+  submitButtonText: {
+    color: "#FFF",
+    fontSize: 16,
+    fontWeight: "700",
   },
 });

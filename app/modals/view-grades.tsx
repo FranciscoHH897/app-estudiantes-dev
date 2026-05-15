@@ -29,7 +29,10 @@ export default function ViewGradesScreen() {
 
   useEffect(() => {
     const fetchClassInfo = async () => {
-      if (!classId) return;
+      if (!classId) {
+        setLoadingClass(false);
+        return;
+      }
       try {
         const docSnap = await getDoc(doc(db, "classes", classId));
         if (docSnap.exists()) {
@@ -72,7 +75,7 @@ export default function ViewGradesScreen() {
         <Text style={styles.gradeWeight}>Peso: {item.porcentaje}%</Text>
       </View>
       <View style={styles.scoreContainer}>
-        <Text style={styles.scoreText}>{item.nota.toFixed(1)}</Text>
+        <Text style={styles.scoreText}>{item.nota?.toFixed(1) || "0.0"}</Text>
       </View>
       <TouchableOpacity 
         style={styles.deleteButton}
@@ -85,7 +88,7 @@ export default function ViewGradesScreen() {
 
   if (loadingClass || gradesLoading) {
     return (
-      <View style={styles.centered}>
+      <View style={[styles.container, styles.centered]}>
         <ActivityIndicator size="large" color={Colors.light.tint} />
       </View>
     );
