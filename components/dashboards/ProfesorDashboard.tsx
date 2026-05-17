@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import { Alert, StyleSheet, Text, TouchableOpacity, View, ScrollView } from "react-native";
+import { StyleSheet, Text, TouchableOpacity, View, ScrollView } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/theme";
 import DashboardHero from "./DashboardHero";
@@ -60,7 +60,7 @@ export default function ProfesorDashboard({ nombre }: Props) {
 
         <TouchableOpacity 
           style={styles.card}
-          onPress={() => Alert.alert("Próximamente", "Esta función estará disponible en una fase posterior.")}
+          onPress={() => router.push("/avisos")}
         >
           <View style={[styles.iconContainer, { backgroundColor: '#DCFCE7' }]}>
             <Ionicons name="megaphone" size={22} color="#16A34A" />

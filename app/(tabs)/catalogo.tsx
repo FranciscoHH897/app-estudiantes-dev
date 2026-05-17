@@ -7,7 +7,8 @@ import {
   TouchableOpacity, 
   View,
   ActivityIndicator,
-  Alert
+  Alert,
+  Platform
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useClasses } from "@/hooks/use-classes";
@@ -27,31 +28,58 @@ export default function CatalogScreen() {
     );
   }, [catalog, search]);
 
-  const handleEnroll = (item: ClassModel) => {
+  const handleEnroll = async (item: ClassModel) => {
+    console.log("handleEnroll llamado para:", item.materia);
     const isEnrolled = myEnrollments.some(enr => enr.classId === item.id);
+    console.log("¿Ya inscrito?", isEnrolled);
+    
     if (isEnrolled) {
       Alert.alert("Ya inscrito", "Ya te encuentras inscrito en esta materia.");
       return;
     }
 
-    Alert.alert(
-      "Confirmar Inscripción",
-      `¿Deseas inscribirte en la clase de ${item.materia} con el Prof. ${item.profesorNombre}?`,
-      [
-        { text: "Cancelar", style: "cancel" },
-        { 
-          text: "Inscribirme", 
-          onPress: async () => {
-            try {
-              await enrollInClass(item);
-              Alert.alert("Éxito", "Te has inscrito correctamente.");
-            } catch (error: any) {
-              Alert.alert("Conflicto", error.message);
-            }
-          } 
+    // Para web, usar confirm en lugar de Alert.alert
+    if (Platform.OS === 'web') {
+      const confirmed = window.confirm(
+        `¿Deseas inscribirte en la clase de ${item.materia} con el Prof. ${item.profesorNombre}?`
+      );
+      
+      if (confirmed) {
+        console.log("Confirmación aceptada");
+        try {
+          console.log("Llamando enrollInClass...");
+          await enrollInClass(item);
+          console.log("Inscripción exitosa");
+          window.alert("Te has inscrito correctamente.");
+        } catch (error: any) {
+          console.error("Error en inscripción:", error);
+          window.alert(`Error: ${error.message}`);
         }
-      ]
-    );
+      }
+    } else {
+      Alert.alert(
+        "Confirmar Inscripción",
+        `¿Deseas inscribirte en la clase de ${item.materia} con el Prof. ${item.profesorNombre}?`,
+        [
+          { text: "Cancelar", style: "cancel" },
+          { 
+            text: "Inscribirme", 
+            onPress: async () => {
+              console.log("Botón Inscribirme presionado");
+              try {
+                console.log("Llamando enrollInClass...");
+                await enrollInClass(item);
+                console.log("Inscripción exitosa");
+                Alert.alert("Éxito", "Te has inscrito correctamente.");
+              } catch (error: any) {
+                console.error("Error en inscripción:", error);
+                Alert.alert("Conflicto", error.message);
+              }
+            } 
+          }
+        ]
+      );
+    }
   };
 
   const renderItem = ({ item }: { item: ClassModel }) => {
@@ -77,8 +105,12 @@ export default function CatalogScreen() {
         
         <TouchableOpacity 
           style={[styles.enrollButton, isEnrolled && styles.enrolledButton]}
-          onPress={() => handleEnroll(item)}
+          onPress={() => {
+            console.log("TouchableOpacity presionado!");
+            handleEnroll(item);
+          }}
           disabled={isEnrolled}
+          activeOpacity={0.7}
         >
           <Text style={styles.enrollButtonText}>
             {isEnrolled ? "Inscrito" : "Inscribirse"}

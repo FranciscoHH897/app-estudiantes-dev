@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { collection, query, where, onSnapshot, addDoc, serverTimestamp, writeBatch, getDocs, doc } from "firebase/firestore";
+import { collection, query, where, onSnapshot, addDoc, serverTimestamp, writeBatch, getDocs, doc, getDoc } from "firebase/firestore";
 import { db } from "@/src/api/firebase";
 import { Enrollment } from "@/src/domain/enrollment";
 import { ClassModel } from "@/src/domain/class";
@@ -27,8 +27,9 @@ export const useEnrollments = () => {
       
       // Para cada inscripción, necesitamos los datos de la clase
       const joinedData = await Promise.all(enrollmentDocs.map(async (enr) => {
-        const classSnap = await getDocs(query(collection(db, "classes"), where("__name__", "==", enr.classId)));
-        const classData = classSnap.docs[0]?.data() as ClassModel;
+        const classDocRef = doc(db, "classes", enr.classId);
+        const classSnap = await getDoc(classDocRef);
+        const classData = classSnap.exists() ? { id: classSnap.id, ...classSnap.data() } as ClassModel : undefined;
         return { ...enr, classData };
       }));
 
@@ -41,8 +42,17 @@ export const useEnrollments = () => {
 
   // 2. Inscribir alumno
   const enrollInClass = async (targetClass: ClassModel) => {
-    if (!user || profile?.rol !== 'estudiante') throw new Error("Solo los alumnos pueden inscribirse.");
+    console.log("enrollInClass iniciado");
+    console.log("Usuario:", user?.uid);
+    console.log("Perfil:", profile);
+    console.log("Rol:", profile?.rol);
+    
+    if (!user || profile?.rol !== 'estudiante') {
+      console.error("Validación fallida: usuario o rol incorrecto");
+      throw new Error("Solo los alumnos pueden inscribirse.");
+    }
 
+    console.log("Validando conflictos...");
     // Validar conflictos con materias ya inscritas
     const hasConflict = myEnrollments.some(enr => {
       if (!enr.classData) return false;
@@ -53,16 +63,19 @@ export const useEnrollments = () => {
     });
 
     if (hasConflict) {
+      console.error("Conflicto de horario detectado");
       throw new Error("Esta clase se solapa con una materia ya inscrita en tu horario.");
     }
 
     // Validar si ya está inscrito
     const isAlreadyEnrolled = myEnrollments.some(enr => enr.classId === targetClass.id);
     if (isAlreadyEnrolled) {
+      console.error("Ya inscrito en esta materia");
       throw new Error("Ya estás inscrito en esta materia.");
     }
 
-    await addDoc(collection(db, "enrollments"), {
+    console.log("Guardando inscripción en Firestore...");
+    return await addDoc(collection(db, "enrollments"), {
       studentId: user.uid,
       studentNombre: profile?.nombre || "Estudiante",
       classId: targetClass.id,

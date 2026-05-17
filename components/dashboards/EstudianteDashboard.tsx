@@ -81,7 +81,7 @@ export default function EstudianteDashboard({ nombre }: Props) {
 
       <TouchableOpacity 
         style={styles.cardFull} 
-        onPress={() => Alert.alert("Próximamente", "Esta función estará disponible en una fase posterior.")}
+        onPress={() => router.push("/avisos")}
       >
         <View style={[styles.iconContainer, { backgroundColor: '#E0F2FE' }]}>
             <Ionicons name="notifications" size={22} color="#0284C7" />
