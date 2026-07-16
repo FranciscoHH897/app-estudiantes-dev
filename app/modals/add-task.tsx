@@ -1,18 +1,17 @@
 import { useEffect, useState } from "react";
-import { 
-  Alert, 
-  ScrollView, 
-  StyleSheet, 
-  Text, 
-  TextInput, 
-  TouchableOpacity, 
+import {
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
   View,
   ActivityIndicator
 } from "react-native";
-import { 
-    collection, 
-    addDoc, 
-    serverTimestamp, 
+import {
+    collection,
+    addDoc,
+    serverTimestamp,
     doc,
     getDoc,
     updateDoc,
@@ -30,6 +29,7 @@ import { TaskPriority } from "@/src/domain/task";
 import { useClasses } from "@/hooks/use-classes";
 import { useEnrollments } from "@/hooks/use-enrollments";
 import { Colors } from "@/constants/theme";
+import { notify } from "@/src/utils/notify";
 
 export default function AddTaskScreen() {
   const { user, profile } = useAuth();
@@ -80,9 +80,16 @@ export default function AddTaskScreen() {
     fetchTask();
   }, [id]);
 
+  useEffect(() => {
+    if (!id && profile?.rol === "estudiante") {
+      notify("Acción no permitida", "Solo puedes hacer la entrega de tus tareas asignadas, no registrar nuevas.");
+      router.back();
+    }
+  }, [id, profile]);
+
   const handleSave = async () => {
     if (!titulo) {
-      Alert.alert("Error", "Por favor ingresa un título.");
+      notify("Error", "Por favor ingresa un título.");
       return;
     }
 
@@ -114,7 +121,7 @@ export default function AddTaskScreen() {
              const groupId = Date.now().toString(); // Identificador común
 
              if (snapshot.empty) {
-                Alert.alert("Aviso", "No hay alumnos inscritos en esta clase.");
+                notify("Aviso", "No hay alumnos inscritos en esta clase.");
                 setLoading(false);
                 return;
              }
@@ -149,7 +156,7 @@ export default function AddTaskScreen() {
       router.back();
     } catch (error) {
       console.error(error);
-      Alert.alert("Error", "No se pudo guardar la tarea.");
+      notify("Error", "No se pudo guardar la tarea.");
     } finally {
       setLoading(false);
     }

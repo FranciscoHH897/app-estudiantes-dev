@@ -1,28 +1,37 @@
 import { useEffect, useState } from "react";
-import { 
-  Alert, 
-  ScrollView, 
-  StyleSheet, 
-  Text, 
-  TextInput, 
-  TouchableOpacity, 
+import {
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
   View,
   ActivityIndicator
 } from "react-native";
-import { 
-    doc, 
-    getDoc, 
+import {
+    doc,
+    getDoc,
     updateDoc,
     serverTimestamp
 } from "firebase/firestore";
 import { router, useLocalSearchParams } from "expo-router";
+import { Picker } from "@react-native-picker/picker";
 
 import { db } from "@/src/api/firebase";
 import { useAuth } from "@/src/lib/auth-context";
 import { useClasses } from "@/hooks/use-classes";
 import { Colors } from "@/constants/theme";
+import { notify } from "@/src/utils/notify";
 
 const DAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+
+// Franjas de 07:00 a 22:00 cada 30 min, que cubren el horario de clases de la facultad.
+const TIME_SLOTS = Array.from({ length: 31 }, (_, i) => {
+  const totalMinutes = 7 * 60 + i * 30;
+  const hours = String(Math.floor(totalMinutes / 60)).padStart(2, "0");
+  const minutes = String(totalMinutes % 60).padStart(2, "0");
+  return `${hours}:${minutes}`;
+});
 
 export default function AddClassScreen() {
   const { user } = useAuth();
@@ -73,7 +82,7 @@ export default function AddClassScreen() {
 
   const handleSave = async () => {
     if (!materia || !salon || diasSeleccionados.length === 0 || !horaInicio || !horaFin) {
-      Alert.alert("Error", "Por favor completa todos los campos obligatorios.");
+      notify("Error", "Por favor completa todos los campos obligatorios.");
       return;
     }
 
@@ -100,7 +109,7 @@ export default function AddClassScreen() {
 
       router.back();
     } catch (error: any) {
-      Alert.alert("Error", error.message || "No se pudo guardar la materia.");
+      notify("Error", error.message || "No se pudo guardar la materia.");
       console.error(error);
     } finally {
       setLoading(false);
@@ -165,21 +174,36 @@ export default function AddClassScreen() {
       <View style={styles.row}>
         <View style={styles.col}>
           <Text style={styles.label}>Hora Inicio *</Text>
-          <TextInput 
-            style={styles.input}
-            placeholder="08:00"
-            value={horaInicio}
-            onChangeText={setHoraInicio}
-          />
+          <View style={styles.pickerContainer}>
+            <Picker
+              selectedValue={horaInicio}
+              onValueChange={(val) => {
+                setHoraInicio(val);
+                if (horaFin && horaFin <= val) setHoraFin("");
+              }}
+              style={styles.picker}
+            >
+              <Picker.Item label="Selecciona..." value="" />
+              {TIME_SLOTS.map(slot => (
+                <Picker.Item key={slot} label={slot} value={slot} />
+              ))}
+            </Picker>
+          </View>
         </View>
         <View style={styles.col}>
           <Text style={styles.label}>Hora Fin *</Text>
-          <TextInput 
-            style={styles.input}
-            placeholder="10:00"
-            value={horaFin}
-            onChangeText={setHoraFin}
-          />
+          <View style={styles.pickerContainer}>
+            <Picker
+              selectedValue={horaFin}
+              onValueChange={(val) => setHoraFin(val)}
+              style={styles.picker}
+            >
+              <Picker.Item label="Selecciona..." value="" />
+              {TIME_SLOTS.filter(slot => !horaInicio || slot > horaInicio).map(slot => (
+                <Picker.Item key={slot} label={slot} value={slot} />
+              ))}
+            </Picker>
+          </View>
         </View>
       </View>
 
@@ -265,6 +289,16 @@ const styles = StyleSheet.create({
   },
   dayButtonTextActive: {
     color: "#FFF",
+  },
+  pickerContainer: {
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    borderRadius: 12,
+    backgroundColor: "#FFF",
+    overflow: "hidden",
+  },
+  picker: {
+    height: 50,
   },
   row: {
     flexDirection: "row",

@@ -1,10 +1,11 @@
 import { useAuth } from "@/src/lib/auth-context";
+import { isProfesor } from "@/src/lib/role-utils";
 import { Redirect, Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/theme";
 
 export default function Layout() {
-  const { user, loading } = useAuth();
+  const { user, profile, loading } = useAuth();
 
   if (loading) return null;
 
@@ -59,19 +60,21 @@ export default function Layout() {
           tabBarIcon: ({ color, size }) => <Ionicons name="stats-chart" size={size} color={color} />
         }} 
       />
-      <Tabs.Screen 
-        name="mapa" 
-        options={{ 
+      <Tabs.Screen
+        name="mapa"
+        options={{
           title: "Mapa",
-          tabBarIcon: ({ color, size }) => <Ionicons name="grid-outline" size={size} color={color} />
-        }} 
+          tabBarIcon: ({ color, size }) => <Ionicons name="grid-outline" size={size} color={color} />,
+          href: isProfesor(profile?.rol) ? null : undefined,
+        }}
       />
-      <Tabs.Screen 
-        name="catalogo" 
-        options={{ 
+      <Tabs.Screen
+        name="catalogo"
+        options={{
           title: "Explorar",
-          tabBarIcon: ({ color, size }) => <Ionicons name="search" size={size} color={color} />
-        }} 
+          tabBarIcon: ({ color, size }) => <Ionicons name="search" size={size} color={color} />,
+          href: isProfesor(profile?.rol) ? null : undefined,
+        }}
       />
     </Tabs>
   );

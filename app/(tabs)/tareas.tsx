@@ -242,7 +242,11 @@ export default function TareasScreen() {
         <View style={styles.emptyContainer}>
           <Ionicons name="list-outline" size={64} color="#D1D5DB" />
           <Text style={styles.emptyTitle}>Sin tareas pendientes</Text>
-          <Text style={styles.emptySubtitle}>Disfruta de tu tiempo libre o registra un nuevo pendiente.</Text>
+          <Text style={styles.emptySubtitle}>
+            {profile?.rol === "estudiante"
+              ? "Aquí verás las tareas que te asignen tus profesores."
+              : "Disfruta de tu tiempo libre o registra un nuevo pendiente."}
+          </Text>
         </View>
       ) : (
         <FlatList
@@ -253,12 +257,14 @@ export default function TareasScreen() {
         />
       )}
 
-      <TouchableOpacity
-        style={styles.fab}
-        onPress={() => router.push("/modals/add-task")}
-      >
-        <Ionicons name="add" size={30} color="#FFF" />
-      </TouchableOpacity>
+      {profile?.rol !== "estudiante" && (
+        <TouchableOpacity
+          style={styles.fab}
+          onPress={() => router.push("/modals/add-task")}
+        >
+          <Ionicons name="add" size={30} color="#FFF" />
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
